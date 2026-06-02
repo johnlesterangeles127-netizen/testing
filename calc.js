@@ -13,14 +13,27 @@
     return items.reduce((sum, it) => sum + stockValue(it), 0);
   }
 
+  // Compute the discount amount for a single line item
+  // line.item_discount = { type: 'percent'|'fixed'|'senior'|'none', value: Number }
+  function lineDiscount(line) {
+    const base = (Number(line.qty) || 0) * (Number(line.sell_price) || 0);
+    const d = line.item_discount;
+    if (!d || d.type === 'none' || !d.type) return 0;
+    if (d.type === 'percent') return base * Math.min(Number(d.value) || 0, 100) / 100;
+    if (d.type === 'fixed')   return Math.min(Number(d.value) || 0, base);
+    if (d.type === 'senior')  return base * 0.20;
+    return 0;
+  }
+
   // Sale computations per line
   function lineTotals(line, defaultTaxPct=0) {
     const qty = Number(line.qty) || 0;
     const sellPrice = Number(line.sell_price) || 0;
     const costPrice = Number(line.cost_price) || 0;
-    // Discounts and tax removed: revenue is sellPrice * qty
+    // Per-item discount support
     const gross = sellPrice * qty;
-    const revenue = gross; // no discount, no tax
+    const itemDisc = lineDiscount(line);
+    const revenue = gross - itemDisc; // deduct per-item discount
     const cogs = costPrice * qty;
     const gp = revenue - cogs;
     return { gross, revenue, cogs, gp };
@@ -48,10 +61,8 @@
   }
 
   function withinDate(dateStr, start, end) {
-    const d = new Date(dateStr);
-    if (start && d < new Date(start)) return false;
-    if (end && d > new Date(end)) return false;
-    return true;
+    const d = dateStr.slice(0, 10);
+    return (!start || d >= start) && (!end || d <= end);
   }
 
   function sumExpenses(expenses, start, end) {
@@ -318,12 +329,28 @@
     return result;
   }
 
+  // Convert payroll records into expense-shaped objects so they can be
+  // merged with the expenses array for totals and chart data.
+  // Each payroll entry has a `period` like "2025-05" (YYYY-MM); we map it to
+  // the first day of that month so date-range filters work correctly.
+  function payrollToExpenses(payroll) {
+    return (payroll || []).map(p => ({
+      id:       p.id,
+      date:     p.period ? p.period + '-01' : (p.created_at || '').slice(0, 10),
+      amount:   Number(p.net_pay) || 0,
+      category: 'Payroll',
+      note:     p.staff_id ? `Staff payroll (${p.period || ''})` : 'Payroll',
+      _isPayroll: true
+    }));
+  }
+
   window.Calc = {
     currency,
     stockValue, totalStockValue,
-    lineTotals, saleTotals,
+    lineDiscount, lineTotals, saleTotals,
     sumExpenses, sumSalesRevenue, sumSalesCogs, sumSalesGP, netProfit,
     groupByDateTotals, groupByMonthlyTotals, groupByCalendarYear, topSellingItems, topSellingByCategory, topSellingCurrentMonth, topItemsMonthlyTrend,
-    withinDate
+    withinDate,
+    payrollToExpenses
   };
 })();
