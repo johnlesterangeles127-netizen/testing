@@ -13,7 +13,8 @@
     staff:           [],
     payroll:         [],
     stockLog:        [],
-    menuProducts:    []
+    menuProducts:    [],
+    discountLog:     []
   };
 
   // ── SETTINGS (localStorage) ────────────────────────────────────────────────
@@ -84,7 +85,7 @@
     // Load all tables in parallel — stock_log uses paginated loader to get ALL rows
     await Promise.all([
       _loadTable('inventory',        'created_at', true),
-      _loadTable('sales',            'date',       false),
+      _loadAllSales(),
       _loadTable('expenses',         'date',       false),
       _loadTable('monthly_top_items','month',      false),
       _loadTable('staff',            'name',       true),
@@ -170,6 +171,32 @@
       console.log(`✅ stock_log: loaded ${allRows.length} total rows`);
     } catch(e) {
       console.error('❌ Failed to load stock_log:', e.message || e);
+    }
+  }
+
+  // Paginated sales loader — pages through ALL rows so nothing is ever missing.
+  // No row limit, no assumptions about count. Identical pattern to _loadAllStockLog.
+  async function _loadAllSales() {
+    try {
+      const PAGE = 1000;
+      let allRows = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await db
+          .from('sales')
+          .select('*')
+          .order('date', { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const rows = data || [];
+        allRows = allRows.concat(rows);
+        if (rows.length < PAGE) break; // last page reached
+        from += PAGE;
+      }
+      cache.sales = allRows.map(s => _unpackSaleFromDB(s));
+      console.log(`✅ sales: loaded ${allRows.length} total rows`);
+    } catch(e) {
+      console.error('❌ Failed to load sales:', e.message || e);
     }
   }
 
@@ -457,6 +484,27 @@
     _save(`delete menu_products [${name}]`, db.from('menu_products').delete().eq('id', id));
   }
 
+  // ── DISCOUNT LOG ────────────────────────────────────────────────────────────
+  // Stored in localStorage — no separate Supabase table needed.
+  // Entry shape: { id, sale_id, date, product_id, product_name, discount_type, discount_value, discount_amt, original_price, qty, done_by }
+  const DL_KEY = 'reserve_discount_log';
+  function _readDiscountLog()  { try { return JSON.parse(localStorage.getItem(DL_KEY)) || []; } catch { return []; } }
+  function _writeDiscountLog(log) { try { localStorage.setItem(DL_KEY, JSON.stringify(log)); } catch(e) { console.error(e); } }
+  function getDiscountLog() {
+    if (!cache.discountLog.length) cache.discountLog = _readDiscountLog();
+    return cache.discountLog;
+  }
+  function addDiscountLogEntries(entries) {
+    const log = _readDiscountLog();
+    log.unshift(...entries);
+    _writeDiscountLog(log);
+    cache.discountLog = log;
+  }
+  function clearDiscountLog() {
+    cache.discountLog = [];
+    _writeDiscountLog([]);
+  }
+
   // ── EXPOSE ─────────────────────────────────────────────────────────────────
   window.StorageAPI = {
     ensureDefaults, uid,
@@ -472,6 +520,7 @@
     toCSV, downloadCSV, parseCSV,
     getMonthlyTopItems, saveMonthlyTopItems, saveMonthlyTopRecord,
     getMonthlyRecord, getCurrentMonthKey,
-    getMenuProducts, getMenuProductById, upsertMenuProduct, deleteMenuProduct
+    getMenuProducts, getMenuProductById, upsertMenuProduct, deleteMenuProduct,
+    getDiscountLog, addDiscountLogEntries, clearDiscountLog
   };
 })();
