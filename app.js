@@ -2100,18 +2100,20 @@
     }
 
     const byItem = new Map();
-    filtered.forEach(e => {
-      const key   = e.product_id || e.product_name;
-      const entry = byItem.get(key) || {
-        name:     e.product_name || key,
-        category: lookupCategory(e.product_id, e.product_name),
-        count: 0, qty: 0, total: 0
-      };
-      entry.count += 1;
-      entry.qty   += Number(e.qty) || 0;
-      entry.total += Number(e.discount_amt) || 0;
-      byItem.set(key, entry);
-    });
+    filtered
+      .filter(e => e.product_name !== '(Order-level discount)' && e.product_id !== null)
+      .forEach(e => {
+        const key   = e.product_id || e.product_name;
+        const entry = byItem.get(key) || {
+          name:     e.product_name || key,
+          category: lookupCategory(e.product_id, e.product_name),
+          count: 0, qty: 0, total: 0
+        };
+        entry.count += 1;
+        entry.qty   += Number(e.qty) || 0;
+        entry.total += Number(e.discount_amt) || 0;
+        byItem.set(key, entry);
+      });
     const topItems = Array.from(byItem.values()).sort((a, b) => b.total - a.total);
     if (elTopItem) elTopItem.textContent = topItems.length ? topItems[0].name : '—';
 
