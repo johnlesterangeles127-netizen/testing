@@ -1982,6 +1982,73 @@
 
   // ── DISCOUNT LOG ────────────────────────────────────────────────────────────
   let _dlReady = false;
+
+  // Backfill discount log from existing sales that have discounts but no log entry.
+  // Safe to call multiple times — skips sale_ids already present in the log.
+  function backfillDiscountLog() {
+    const sales = StorageAPI.getSales();
+    const log   = StorageAPI.getDiscountLog();
+    const loggedSaleIds = new Set(log.map(e => e.sale_id));
+    const newEntries = [];
+
+    sales.forEach(sale => {
+      const saleLines = sale.lines || [];
+
+      // Per-item discounts
+      saleLines
+        .filter(l => l.item_discount && l.item_discount.type && l.item_discount.type !== 'none')
+        .forEach(l => {
+          // Only add if this sale isn't already logged (avoid duplicates)
+          if (loggedSaleIds.has(sale.id)) return;
+          const discAmt = Calc.lineDiscount({ qty: l.qty, sell_price: l.sell_price || l.price || 0, item_discount: l.item_discount });
+          if (!discAmt) return;
+          newEntries.push({
+            id:             StorageAPI.uid('dl'),
+            sale_id:        sale.id,
+            date:           sale.date,
+            product_id:     l.item_id || null,
+            product_name:   l.item_name || '—',
+            discount_type:  l.item_discount.type,
+            discount_value: l.item_discount.value,
+            discount_amt:   discAmt,
+            original_price: l.sell_price || l.price || 0,
+            qty:            l.qty,
+            done_by:        sale.done_by || 'Unknown'
+          });
+        });
+
+      // Order-level discount
+      if (!loggedSaleIds.has(sale.id) &&
+          sale.discount_type && sale.discount_type !== 'none' &&
+          (Number(sale.discount_amt) || 0) > 0) {
+        const subtotal = saleLines.reduce((s, l) => s + (Number(l.sell_price || l.price || 0) * (Number(l.qty) || 0)), 0);
+        const discVal  = sale.discount_type === 'senior'  ? 20
+                       : sale.discount_type === 'percent' ? (subtotal > 0 ? +((Number(sale.discount_amt) / subtotal) * 100).toFixed(2) : 0)
+                       : Number(sale.discount_amt);
+        newEntries.push({
+          id:             StorageAPI.uid('dl'),
+          sale_id:        sale.id,
+          date:           sale.date,
+          product_id:     null,
+          product_name:   '(Order-level discount)',
+          discount_type:  sale.discount_type,
+          discount_value: discVal,
+          discount_amt:   Number(sale.discount_amt),
+          original_price: subtotal,
+          qty:            1,
+          done_by:        sale.done_by || 'Unknown'
+        });
+      }
+    });
+
+    if (newEntries.length) {
+      StorageAPI.addDiscountLogEntries(newEntries);
+      console.log(`✅ Backfilled ${newEntries.length} discount log entries from existing sales`);
+    } else {
+      console.log('✅ Discount log backfill: nothing new to add');
+    }
+  }
+
   function setupDiscountLog() {
     const now = new Date();
     const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
@@ -2614,12 +2681,15 @@
     };
     StorageAPI.addSale(sale);
 
-    // Log per-item discounts for analytics
-    const discountEntries = saleLines
+    // Log discounts for analytics — per-item AND order-level
+    const discountEntries = [];
+
+    // 1) Per-item discounts
+    saleLines
       .filter(l => l.item_discount && l.item_discount.type && l.item_discount.type !== 'none')
-      .map(l => {
+      .forEach(l => {
         const discAmt = Calc.lineDiscount({ qty: l.qty, sell_price: l.sell_price, item_discount: l.item_discount });
-        return {
+        discountEntries.push({
           id:             StorageAPI.uid('dl'),
           sale_id:        sale.id,
           date:           sale.date,
@@ -2631,8 +2701,29 @@
           original_price: l.sell_price,
           qty:            l.qty,
           done_by:        sale.done_by || StorageAPI.getSessionUser()
-        };
+        });
       });
+
+    // 2) Order-level discount (senior, percent, fixed, other)
+    if (sale.discount_type && sale.discount_type !== 'none' && (Number(sale.discount_amt) || 0) > 0) {
+      const discVal = sale.discount_type === 'percent' ? (subtotal > 0 ? +((Number(sale.discount_amt) / subtotal) * 100).toFixed(2) : 0)
+                    : sale.discount_type === 'senior'  ? 20
+                    : Number(sale.discount_amt);
+      discountEntries.push({
+        id:             StorageAPI.uid('dl'),
+        sale_id:        sale.id,
+        date:           sale.date,
+        product_id:     null,
+        product_name:   '(Order-level discount)',
+        discount_type:  sale.discount_type,
+        discount_value: discVal,
+        discount_amt:   Number(sale.discount_amt),
+        original_price: subtotal,
+        qty:            1,
+        done_by:        sale.done_by || StorageAPI.getSessionUser()
+      });
+    }
+
     if (discountEntries.length) StorageAPI.addDiscountLogEntries(discountEntries);
 
     // Inject into sales history table instantly
@@ -3325,6 +3416,7 @@
     $('#year').textContent = new Date().getFullYear();
 
     renderAll();
+    backfillDiscountLog();
     toast('Welcome to RESERVE 👋', 'success');
   }
 
