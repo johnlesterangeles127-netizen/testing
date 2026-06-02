@@ -77,6 +77,7 @@
         <li><button class="nav-link" data-section="expenses">🧾 Expenses</button></li>
         <li><button class="nav-link" data-section="staff">👥 Staff</button></li>
         <li><button class="nav-link" data-section="reports">📈 Reports</button></li>
+        <li><button class="nav-link" data-section="discountlog">🏷️ Discount Log</button></li>
         <li><button class="nav-link" data-section="settings">⚙️ Settings</button></li>
       </ul>
     </nav>
@@ -320,6 +321,10 @@
                     <div class="pos-total-row">
                       <span class="pos-total-label">Subtotal</span>
                       <span class="pos-total-val" id="menuSubtotal">₱0.00</span>
+                    </div>
+                    <div class="pos-total-row" id="menuItemDiscountRow" style="display:none;">
+                      <span class="pos-total-label">Item Discounts</span>
+                      <span class="pos-total-val" style="color:var(--red);" id="menuItemDiscountAmt">−₱0.00</span>
                     </div>
                     <div class="pos-total-row pos-discount-row" id="menuDiscountRow" style="display:none;">
                       <span class="pos-total-label" id="menuDiscountLabel">Discount</span>
@@ -660,6 +665,55 @@
             <table class="table">
               <thead><tr><th>#</th><th>Item</th><th>Category</th><th>Qty Sold</th><th>Revenue</th><th>Gross Profit</th></tr></thead>
               <tbody id="reportTopItemsTbody" class="zebra"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ DISCOUNT LOG ══════════════════════════════════════ -->
+      <section id="discountlog" class="section">
+        <div class="section-header">
+          <h2>🏷️ Discount Log</h2>
+          <div class="filters" style="margin:0;gap:8px;">
+            <label>From <input type="date" id="dlStart" style="width:140px;"></label>
+            <label>To <input type="date" id="dlEnd" style="width:140px;"></label>
+            <button id="dlApply" class="btn btn-primary btn-sm">Apply</button>
+            <button id="dlExportCsv" class="btn btn-secondary btn-sm">⬇ Export CSV</button>
+            <button id="dlClearBtn" class="btn btn-danger btn-sm" style="margin-left:auto;">🗑 Clear Log</button>
+          </div>
+        </div>
+        <div class="kpi-grid" style="margin-bottom:16px;">
+          <div class="card kpi kpi-red"><div class="kpi-title">Total Discounts Given</div><div id="dlTotalAmt" class="kpi-value">₱0.00</div></div>
+          <div class="card kpi"><div class="kpi-title">Discount Transactions</div><div id="dlTotalCount" class="kpi-value">0</div></div>
+          <div class="card kpi"><div class="kpi-title">Most Discounted Item</div><div id="dlTopItem" class="kpi-value" style="font-size:14px;">—</div></div>
+          <div class="card kpi kpi-red"><div class="kpi-title">Highest Single Discount</div><div id="dlMaxAmt" class="kpi-value">₱0.00</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div class="card">
+            <div class="card-header">🏆 Most Discounted Items (by ₱ total)</div>
+            <div class="table-wrapper" style="box-shadow:none;border:none;margin:0;max-height:300px;">
+              <table class="table" style="min-width:0;">
+                <thead><tr><th>#</th><th>Item</th><th>Times</th><th>Total ₱ Saved</th><th>Avg per Order</th></tr></thead>
+                <tbody id="dlTopItemsTbody" class="zebra"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">📊 Discount by Type</div>
+            <div class="table-wrapper" style="box-shadow:none;border:none;margin:0;max-height:300px;">
+              <table class="table" style="min-width:0;">
+                <thead><tr><th>Type</th><th>Count</th><th>Total ₱ Saved</th></tr></thead>
+                <tbody id="dlByTypeTbody" class="zebra"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">📋 Full Discount History</div>
+          <div class="table-wrapper" style="box-shadow:none;border:none;margin:0;">
+            <table class="table">
+              <thead><tr><th>Date</th><th>Item</th><th>Qty</th><th>Original Price</th><th>Discount Type</th><th>Discount Value</th><th>₱ Saved</th><th>Done By</th><th>Sale ID</th></tr></thead>
+              <tbody id="dlLogTbody" class="zebra"></tbody>
             </table>
           </div>
         </div>
